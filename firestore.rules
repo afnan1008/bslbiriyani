@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'bslbiriyani@afnan.com';
+    }
+    match /biriyaniPosts/{id} {
+      allow read: if resource.data.approved == true || isAdmin();
+      allow create: if request.resource.data.approved == false;
+      allow update: if isAdmin() || (resource.data.approved == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['surveyYes','surveyNo','verified']));
+      allow delete: if isAdmin();
+    }
+    match /mosques/{id} {
+      allow read, create: if true;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

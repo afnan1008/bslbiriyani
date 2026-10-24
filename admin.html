@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>অ্যাডমিন প্যানেল | বিরিয়ানি ট্র্যাকার</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&family=Tiro+Bangla&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+<header class="header"><div class="header-bg-pattern"></div><div class="container"><div class="header-content">
+  <div class="logo-section"><div class="mosque-icon">🛡️</div><div><h1>অ্যাডমিন প্যানেল</h1><p class="tagline">নতুন বিরিয়ানি আপডেট যাচাই ও অনুমোদন</p></div></div>
+  <div class="header-stats"><a href="index.html" class="stat-pill admin-link"><i class="fas fa-home"></i> হোমপেজ</a></div>
+</div></div></header>
+<main class="main-content"><div class="container">
+  <div id="loginView" class="form-card login-box" style="display:none">
+    <div class="section-header"><h2>অ্যাডমিন লগইন</h2></div>
+    <form id="loginForm">
+      <div class="form-group"><label>অ্যাডমিন আইডি</label><input id="uid" autocomplete="username" required></div>
+      <div class="form-group"><label>পাসওয়ার্ড</label><input id="pw" type="password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary btn-full" type="submit"><i class="fas fa-lock-open"></i> লগইন করুন</button>
+    </form>
+  </div>
+  <div id="panelView" style="display:none">
+    <div class="admin-bar">
+      <div class="tabs" style="box-shadow:none;border:1px solid var(--line)">
+        <button class="tab active" data-v="pending">অপেক্ষমান <span class="count" id="pc">0</span></button>
+        <button class="tab" data-v="approved">অনুমোদিত (ডিলিট)</button>
+      </div>
+      <button class="btn btn-red" id="logout"><i class="fas fa-right-from-bracket"></i> লগআউট</button>
+    </div>
+    <div id="list" class="cards-grid"></div>
+  </div>
+</div></main>
+<div id="toast" class="toast"><span id="toastMessage"></span></div>
+<script src="firebase-config.js"></script>
+<script>
+firebase.auth();
+const ADMIN_EMAIL='afnanhossain9@gmail.com';
+let view='pending',pending=[],approved=[],unsubs=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m,err){const t=$('toast');$('toastMessage').textContent=m;t.className='toast show'+(err?' error':'');setTimeout(()=>t.className='toast',3200)}
+const ms=p=>p.createdAt&&p.createdAt.toMillis?p.createdAt.toMillis():0;
+function toEmail(u){u=u.trim();return /@[^.]+$/.test(u)?u+'.com':u}
+$('loginForm').onsubmit=async e=>{e.preventDefault();
+  try{const c=await firebase.auth().signInWithEmailAndPassword(toEmail($('uid').value),$('pw').value);
+    if((c.user.email||'').toLowerCase()!==ADMIN_EMAIL){const em=c.user.email;await firebase.auth().signOut();toast('লগইন হয়েছে '+em+' দিয়ে, কিন্তু অ্যাডমিন email হতে হবে '+ADMIN_EMAIL,true)}}
+  catch(err){const m={'auth/invalid-credential':'আইডি বা পাসওয়ার্ড ভুল, অথবা Firebase এ এই user বানানো হয়নি','auth/invalid-login-credentials':'আইডি বা পাসওয়ার্ড ভুল, অথবা Firebase এ এই user বানানো হয়নি','auth/user-not-found':'Firebase Authentication এ এই user নেই','auth/wrong-password':'পাসওয়ার্ড ভুল','auth/operation-not-allowed':'Firebase এ Email/Password sign-in চালু করা হয়নি','auth/unauthorized-domain':'এই ওয়েবসাইটের domain Firebase এর Authorized domains এ যোগ করা হয়নি','auth/network-request-failed':'ইন্টারনেট বা নেটওয়ার্ক সমস্যা','auth/too-many-requests':'অনেকবার চেষ্টা হয়েছে, কিছুক্ষণ পর আবার চেষ্টা করুন'};
+    console.error(err);toast((m[err.code]||'লগইন হয়নি')+' ('+err.code+')',true)}};
+$('logout').onclick=()=>firebase.auth().signOut();
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');view=t.dataset.v;render()});
+firebase.auth().onAuthStateChanged(u=>{
+  unsubs.forEach(f=>f());unsubs=[];
+  const ok=u&&(u.email||'').toLowerCase()===ADMIN_EMAIL;
+  $('loginView').style.display=ok?'none':'block';$('panelView').style.display=ok?'block':'none';
+  if(!ok)return;
+  const load=(flag,set)=>db.collection('biriyaniPosts').where('approved','==',flag).onSnapshot(s=>{set(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>ms(b)-ms(a)));render()},e=>toast('ডেটা লোড হয়নি: '+e.code,true));
+  unsubs=[load(false,a=>pending=a),load(true,a=>approved=a)];
+});
+function render(){
+  $('pc').textContent=pending.length;
+  const rows=view==='pending'?pending:approved;
+  if(!rows.length){$('list').innerHTML='<div class="empty-state"><div class="empty-icon">'+(view==='pending'?'✅':'📭')+'</div><h3>'+(view==='pending'?'কোনো অপেক্ষমান আপডেট নেই':'কোনো অনুমোদিত পোস্ট নেই')+'</h3></div>';return}
+  $('list').innerHTML=rows.map(p=>`<div class="biriyani-card">
+    <div class="biriyani-card-header"><h3>🍛 ${esc(p.mosqueName)}</h3><span class="waqt-badge">${esc(p.waqt)}</span></div>
+    <div class="biriyani-card-body">
+      <div class="biriyani-info-row"><i class="fas fa-calendar"></i><span>${esc(p.date)}</span></div>
+      <div class="biriyani-info-row"><i class="fas fa-user"></i><span>${esc(p.addedBy)}</span></div>
+      <div class="biriyani-info-row"><i class="fas fa-phone"></i><span>${esc(p.phone)}</span></div>
+      ${p.note?`<div class="biriyani-note">${esc(p.note)}</div>`:''}
+    </div>
+    <div class="admin-actions">
+      ${view==='pending'?`<button class="btn btn-green" onclick="approve('${p.id}')"><i class="fas fa-check"></i> অনুমোদন</button>`:''}
+      <button class="btn btn-red" onclick="remove('${p.id}')"><i class="fas fa-trash"></i> ${view==='pending'?'বাতিল':'ডিলিট'}</button>
+    </div></div>`).join('');
+}
+async function approve(id){try{await db.collection('biriyaniPosts').doc(id).update({approved:true,approvedAt:firebase.firestore.FieldValue.serverTimestamp()});toast('অনুমোদিত। এখন হোমপেজে দেখা যাবে ✅')}catch(e){toast('অনুমোদন করা যায়নি: '+e.code,true)}}
+async function remove(id){if(!confirm('এই পোস্টটি ডিলিট করবেন? এটি ফিরিয়ে আনা যাবে না।'))return;try{await db.collection('biriyaniPosts').doc(id).delete();toast('ডিলিট হয়েছে')}catch(e){toast('ডিলিট করা যায়নি: '+e.code,true)}}
+</script>
+</body>
+</html>
